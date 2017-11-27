@@ -43,6 +43,7 @@ abstract class Model extends Eloquent {
 
         $table = str_replace( '\\', '', snake_case( str_plural( class_basename( $this ) ) ) );
 
-        return $this->getConnection()->db->prefix . $table ;
+        // return $this->getConnection()->db->prefix . $table ;
+        return $table ;
     }
 }

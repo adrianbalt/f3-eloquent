@@ -41,9 +41,9 @@ class Database implements ConnectionInterface
      */
     public function __construct()
     {
-        global $wpdb;
+        $f3 = \Base::instance();
 
-        $this->db = $wpdb;
+        $this->db = $f3->get('DB');
     }
 
     /**
@@ -57,7 +57,7 @@ class Database implements ConnectionInterface
     {
         $processor = $this->getPostProcessor();
 
-        $table = $this->db->prefix . $table;
+        // $table = $this->db->prefix . $table;
 
         $query = new Builder($this, $this->getQueryGrammar(), $processor);
 
@@ -77,6 +77,19 @@ class Database implements ConnectionInterface
     }
 
     /**
+     * A hacky way to error when using double quotes
+     *
+     * @param $query
+     *
+     * @return string
+     */
+    private function fixQuery($query)
+    {
+        $query = str_replace('"', '`', $query);
+        return $query;
+    }
+
+    /**
      * Run a select statement and return a single result.
      *
      * @param  string $query
@@ -87,14 +100,12 @@ class Database implements ConnectionInterface
      */
     public function selectOne($query, $bindings = array())
     {
-        $query = $this->bind_params($query, $bindings);
+        $result = $this->select($query, $bindings);
 
-        $result = $this->db->get_row($query);
+        // if ($result === false || $this->db->last_error)
+        //     throw new QueryException($query, $bindings, new \Exception($this->db->last_error));
 
-        if ($result === false || $this->db->last_error)
-            throw new QueryException($query, $bindings, new \Exception($this->db->last_error));
-
-        return $result;
+        return $result[0];
     }
 
     /**
@@ -108,69 +119,12 @@ class Database implements ConnectionInterface
      */
     public function select($query, $bindings = array())
     {
-        $query = $this->bind_params($query, $bindings);
+        $result = $this->db->exec($this->fixQuery( $query ), $this->prepareBindings( $bindings ) );
 
-        $result = $this->db->get_results($query);
-
-        if ($result === false || $this->db->last_error)
-            throw new QueryException($query, $bindings, new \Exception($this->db->last_error));
+        // if ($result === false || $this->db->last_error)
+        //     throw new QueryException($query, $bindings, new \Exception($this->db->last_error));
 
         return $result;
-    }
-
-    /**
-     * A hacky way to emulate bind parameters into SQL query
-     *
-     * @param $query
-     * @param $bindings
-     *
-     * @return mixed
-     */
-    private function bind_params($query, $bindings, $update = false)
-    {
-
-        $query = str_replace('"', '`', $query);
-        $bindings = $this->prepareBindings($bindings);
-
-        if (!$bindings) {
-            return $query;
-        }
-
-        $bindings = array_map(function ($replace) {
-            if (is_string($replace)) {
-                $replace = "'" . esc_sql($replace) . "'";
-            } elseif ($replace === null) {
-                $replace = "null";
-            }
-
-            return $replace;
-        }, $bindings);
-
-        $query = str_replace(array('%', '?'), array('%%', '%s'), $query);
-        $query = vsprintf($query, $bindings);
-
-        return $query;
-    }
-
-    /**
-     * Bind and run the query
-     *
-     * @param  string $query
-     * @param  array $bindings
-     * @throws QueryException
-     *
-     * @return array
-     */
-    public function bind_and_run($query, $bindings = array())
-    {
-        $new_query = $this->bind_params($query, $bindings);
-
-        $result = $this->db->query($new_query);
-
-        if ($result === false || $this->db->last_error)
-            throw new QueryException($new_query, $bindings, new \Exception($this->db->last_error));
-
-        return (array) $result;
     }
 
     /**
@@ -222,9 +176,14 @@ class Database implements ConnectionInterface
      */
     public function statement($query, $bindings = array())
     {
-        $new_query = $this->bind_params($query, $bindings, true);
+        $result = $this->db->exec($this->fixQuery( $query ), $this->prepareBindings( $bindings ) );
 
-        return $this->unprepared($new_query);
+        // if ($result === false){
+        //     $last_error = error_get_last();
+        //     throw new QueryException($query, $bindings, new \Exception($last_error['message']));
+        // }
+
+        return ($result === false) ? false : true;
     }
 
     /**
@@ -237,14 +196,14 @@ class Database implements ConnectionInterface
      */
     public function affectingStatement($query, $bindings = array())
     {
-        $new_query = $this->bind_params($query, $bindings, true);
+        $result = $this->db->exec($this->fixQuery( $query ), $this->prepareBindings( $bindings ) );
 
-        $result = $this->db->query($new_query);
+        // if ($result === false){
+        //     $last_error = error_get_last();
+        //     throw new QueryException($query, $bindings, new \Exception($last_error['message']));
+        // }
 
-        if ($result === false || $this->db->last_error)
-            throw new QueryException($new_query, $bindings, new \Exception($this->db->last_error));
-
-        return intval($result);
+        return $this->db->count();
     }
 
     /**
@@ -256,9 +215,9 @@ class Database implements ConnectionInterface
      */
     public function unprepared($query)
     {
-        $result = $this->db->query($query);
+        $result = $this->db->exec($query);
 
-        return ($result === false || $this->db->last_error);
+        return ($result === false) ? false : true;
     }
 
     /**
@@ -319,7 +278,7 @@ class Database implements ConnectionInterface
      */
     public function beginTransaction()
     {
-        $transaction = $this->unprepared("START TRANSACTION;");
+        $transaction = $this->db->begin();
         if ($transaction) {
             $this->transactionCount++;
         }
@@ -335,7 +294,7 @@ class Database implements ConnectionInterface
         if ($this->transactionCount < 1) {
             return;
         }
-        $transaction = $this->unprepared("COMMIT;");
+        $transaction = $this->db->commit();
         if ($transaction) {
             $this->transactionCount--;
         }
@@ -351,7 +310,7 @@ class Database implements ConnectionInterface
         if ($this->transactionCount < 1) {
             return;
         }
-        $transaction = $this->unprepared("ROLLBACK;");
+        $transaction = $this->db->rollback();
         if ($transaction) {
             $this->transactionCount--;
         }
@@ -396,7 +355,7 @@ class Database implements ConnectionInterface
      */
     public function getPdo()
     {
-        return $this;
+        return $this->db;
     }
 
     /**
@@ -408,6 +367,6 @@ class Database implements ConnectionInterface
      */
     public function lastInsertId($args)
     {
-        return $this->db->insert_id;
+        return $this->db->lastInsertId;
     }
 }
