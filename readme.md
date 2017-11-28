@@ -50,9 +50,9 @@ var_dump( DB::table('users')->where('user_login', 'john')->first() );
 ```
 
 ## Creating Models For Custom Tables
-You can use custom tables of the WordPress databases to create models:
+You can use custom tables to create models:
 
-```
+```php
 	namespace whatever;
 
 
