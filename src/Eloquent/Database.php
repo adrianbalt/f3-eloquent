@@ -4,6 +4,7 @@ namespace WeDevs\ORM\Eloquent;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Query\Grammars\Grammar;
+use Illuminate\Database\Query\Grammars\MySqlGrammar;
 use Illuminate\Database\Query\Processors\Processor;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Database\QueryException;
@@ -12,6 +13,13 @@ class Database implements ConnectionInterface
 {
 
     public $db;
+
+    /**
+     * The query grammar implementation.
+     *
+     * @var \Illuminate\Database\Query\Grammars\Grammar
+     */
+    protected $queryGrammar;
 
     /**
      * Count of active transactions
@@ -44,6 +52,7 @@ class Database implements ConnectionInterface
         $f3 = \Base::instance();
 
         $this->db = $f3->get('DB');
+        $this->queryGrammar = new MySqlGrammar();
     }
 
     /**
@@ -77,19 +86,6 @@ class Database implements ConnectionInterface
     }
 
     /**
-     * A hacky way to error when using double quotes
-     *
-     * @param $query
-     *
-     * @return string
-     */
-    private function fixQuery($query)
-    {
-        $query = str_replace('"', '`', $query);
-        return $query;
-    }
-
-    /**
      * Run a select statement and return a single result.
      *
      * @param  string $query
@@ -119,7 +115,7 @@ class Database implements ConnectionInterface
      */
     public function select($query, $bindings = array())
     {
-        $result = $this->db->exec($this->fixQuery( $query ), $this->prepareBindings( $bindings ) );
+        $result = $this->db->exec( $query , $this->prepareBindings( $bindings ) );
 
         // if ($result === false || $this->db->last_error)
         //     throw new QueryException($query, $bindings, new \Exception($this->db->last_error));
@@ -176,7 +172,7 @@ class Database implements ConnectionInterface
      */
     public function statement($query, $bindings = array())
     {
-        $result = $this->db->exec($this->fixQuery( $query ), $this->prepareBindings( $bindings ) );
+        $result = $this->db->exec($query , $this->prepareBindings( $bindings ) );
 
         // if ($result === false){
         //     $last_error = error_get_last();
@@ -196,7 +192,7 @@ class Database implements ConnectionInterface
      */
     public function affectingStatement($query, $bindings = array())
     {
-        $result = $this->db->exec($this->fixQuery( $query ), $this->prepareBindings( $bindings ) );
+        $result = $this->db->exec($query , $this->prepareBindings( $bindings ) );
 
         // if ($result === false){
         //     $last_error = error_get_last();
@@ -345,7 +341,7 @@ class Database implements ConnectionInterface
 
     public function getQueryGrammar()
     {
-        return new Grammar();
+        return $this->queryGrammar;
     }
 
     /**
